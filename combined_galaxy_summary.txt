@@ -1,0 +1,33 @@
+Total galaxies in dataset: 55874
+Galaxies processed: 55425
+Range of distances: 10.00 Mpc to 850.75 Mpc
+Galaxies with redshift data: 55425
+
+Distance calculation methods used:
+  DMsnIa: 1002
+  DMtf: 11990
+  DMfp: 42081
+  DMsbf: 282
+  DMsnII: 42
+  DMtrgb: 19
+  DMcep: 4
+  DMmas: 5
+
+Maser Measurement Analysis:
+Identifier: 20679
+  Maser Distance: 51.52 Mpc
+  Redshift Velocity: 3391.00 km/s
+Identifier: 50048
+  Maser Distance: 87.50 Mpc
+  Redshift Velocity: 6518.00 km/s
+Identifier: 53012
+  Maser Distance: 112.20 Mpc
+  Redshift Velocity: 8576.00 km/s
+Identifier: 59306
+  Maser Distance: 131.83 Mpc
+  Redshift Velocity: 10367.00 km/s
+Identifier: 59868
+  Maser Distance: 109.14 Mpc
+  Redshift Velocity: 8279.00 km/s
+
+Average Redshift Velocity: 7426.20 km/s
