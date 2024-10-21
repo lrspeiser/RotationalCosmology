@@ -203,12 +203,13 @@ def scale_positions(positions, scale_factor=1e-6):
     """
     return positions * scale_factor
 
-def create_improved_3d_visualization(maser_data, rotation_axis, earth_position):
+def create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, earth_position):
     fig = go.Figure()
     scale_factor = 1e-6
 
     scaled_earth_position = earth_position * scale_factor
 
+    # Plot Earth
     fig.add_trace(go.Scatter3d(
         x=[scaled_earth_position[0]],
         y=[scaled_earth_position[1]],
@@ -219,6 +220,7 @@ def create_improved_3d_visualization(maser_data, rotation_axis, earth_position):
         name='Earth'
     ))
 
+    # Plot masers
     maser_x, maser_y, maser_z = [], [], []
     for maser in maser_data:
         position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
@@ -236,6 +238,27 @@ def create_improved_3d_visualization(maser_data, rotation_axis, earth_position):
         name='Masers'
     ))
 
+    # Plot other galaxies (excluding masers)
+    galaxy_x, galaxy_y, galaxy_z = [], [], []
+    for galaxy in galaxy_data:
+        if galaxy['distance_method'] == 'DMmas':  # Skip masers already plotted
+            continue
+        position = equatorial_to_cartesian(float(galaxy['ra']), float(galaxy['dec']), galaxy['distance_mpc'])
+        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
+        scaled_position = adjusted_position * scale_factor
+        galaxy_x.append(scaled_position[0])
+        galaxy_y.append(scaled_position[1])
+        galaxy_z.append(scaled_position[2])
+
+    fig.add_trace(go.Scatter3d(
+        x=galaxy_x, y=galaxy_y, z=galaxy_z,
+        mode='markers',
+        marker=dict(size=2, color='gray'),
+        text=[galaxy['identifier'] for galaxy in galaxy_data if galaxy['distance_method'] != 'DMmas'],
+        name='Galaxies'
+    ))
+
+    # Plot rotation axis
     max_range = max(max(abs(np.array(maser_x))), max(abs(np.array(maser_y))), max(abs(np.array(maser_z))))
     axis_length = max_range * 1.5
 
@@ -248,6 +271,7 @@ def create_improved_3d_visualization(maser_data, rotation_axis, earth_position):
         name='Rotation Axis'
     ))
 
+    # Update layout
     fig.update_layout(
         scene=dict(
             xaxis_title='X (Scaled Mpc)',
@@ -259,55 +283,12 @@ def create_improved_3d_visualization(maser_data, rotation_axis, earth_position):
         showlegend=True
     )
 
+    # Save the visualization
     plot_file = "improved_universe_visualization.html"
     fig.write_html(plot_file)
     print(f"[edd_data_analysis] Improved 3D visualization saved as '{plot_file}'")
     return plot_file
 
-# Additional visualization: 2D projection with relative distances preserved
-def create_2d_projection(maser_data, rotation_axis, earth_position):
-    fig = go.Figure()
-
-    scale_factor = 1e-6
-
-    # Calculate distances from axis and along axis for Earth
-    earth_dist_from_axis = np.linalg.norm(earth_position - np.dot(earth_position, rotation_axis) * rotation_axis)
-    earth_dist_along_axis = np.dot(earth_position, rotation_axis)
-
-    fig.add_trace(go.Scatter(
-        x=[earth_dist_from_axis * scale_factor],
-        y=[earth_dist_along_axis * scale_factor],
-        mode='markers+text',
-        marker=dict(size=10, color='blue'),
-        text=['Earth'],
-        name='Earth'
-    ))
-
-    for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        dist_from_axis = np.linalg.norm(adjusted_position - np.dot(adjusted_position, rotation_axis) * rotation_axis)
-        dist_along_axis = np.dot(adjusted_position, rotation_axis)
-
-        fig.add_trace(go.Scatter(
-            x=[dist_from_axis * scale_factor],
-            y=[dist_along_axis * scale_factor],
-            mode='markers+text',
-            marker=dict(size=5, color='red'),
-            text=[maser['identifier']],
-            name=f'Maser {maser["identifier"]}'
-        ))
-
-    fig.update_layout(
-        xaxis_title="Scaled Distance from Rotation Axis",
-        yaxis_title="Scaled Distance along Rotation Axis",
-        title=f"2D Projection of Cosmic Objects (Scale Factor: {scale_factor})"
-    )
-
-    plot_file = "2d_projection_visualization.html"
-    fig.write_html(plot_file)
-    print(f"[edd_data_analysis] 2D projection visualization saved as '{plot_file}'")
-    return plot_file
 
 def create_static_2d_distance_speed_graph(maser_data):
     distances = [maser['maser_distance'] for maser in maser_data]
@@ -519,20 +500,29 @@ def process_galaxy(csv_writer, identifier, distance_mpc, redshift_velocity, dist
     if not np.isnan(redshift_velocity):
         galaxies_with_redshift += 1
 
-    # For maser galaxies, calculate frame-dragging effect
     if distance_method == 'DMmas':
-        # Assuming mass of galaxy is a large value, let's use a dummy mass for illustration (1e40 kg)
-        galaxy_mass = 1e40  # mass in kg
-        galaxy_radius = 1e20  # radius in meters for simplification
-
-        distance_ly = distance_mpc * 3.262e6  # Convert distance to light years
+        galaxy_mass = 1e40  # mass in kg (dummy value)
+        galaxy_radius = 1e20  # radius in meters (simplified)
+        distance_ly = distance_mpc * 3.262e6  # Convert Mpc to light years
         frame_dragging_effect = calculate_frame_dragging_effect(galaxy_mass, galaxy_radius, distance_ly)
     else:
         frame_dragging_effect = np.nan
 
     csv_writer.writerow([identifier, distance_mpc, redshift_velocity, distance_method, ra, dec, glon, glat, frame_dragging_effect])
 
-    # ONLY ADD TO MASER DATA IF THE DISTANCE METHOD IS 'DMmas'
+    # Add to galaxy_data
+    galaxy_data.append({
+        'identifier': identifier,
+        'distance_mpc': distance_mpc,
+        'redshift_velocity': float(redshift_velocity) if not np.isnan(redshift_velocity) else None,
+        'distance_method': distance_method,
+        'ra': ra,
+        'dec': dec,
+        'glon': glon,
+        'glat': glat,
+        'frame_dragging_effect': frame_dragging_effect
+    })
+
     if distance_method == 'DMmas' and not np.isnan(redshift_velocity):
         maser_data.append({
             'identifier': identifier,
@@ -545,6 +535,7 @@ def process_galaxy(csv_writer, identifier, distance_mpc, redshift_velocity, dist
             'frame_dragging_effect': frame_dragging_effect
         })
         print(f"[process_galaxy] Extracted maser data for {identifier}")
+
 
 def create_maser_xml():
     print("[edd_data_analysis] Creating XML file for maser data")
@@ -614,9 +605,77 @@ def objective_function(params):
 
     return total_error
 
+def create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position):
+    fig = go.Figure()
+    scale_factor = 1e-6
+
+    # Calculate Earth's distances from and along the rotation axis
+    earth_dist_from_axis = np.linalg.norm(earth_position - np.dot(earth_position, rotation_axis) * rotation_axis)
+    earth_dist_along_axis = np.dot(earth_position, rotation_axis)
+
+    fig.add_trace(go.Scatter(
+        x=[earth_dist_from_axis * scale_factor],
+        y=[earth_dist_along_axis * scale_factor],
+        mode='markers+text',
+        marker=dict(size=10, color='blue'),
+        text=['Earth'],
+        name='Earth'
+    ))
+
+    # Plot masers
+    for maser in maser_data:
+        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
+        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
+        dist_from_axis = np.linalg.norm(adjusted_position - np.dot(adjusted_position, rotation_axis) * rotation_axis)
+        dist_along_axis = np.dot(adjusted_position, rotation_axis)
+
+        fig.add_trace(go.Scatter(
+            x=[dist_from_axis * scale_factor],
+            y=[dist_along_axis * scale_factor],
+            mode='markers+text',
+            marker=dict(size=5, color='red'),
+            text=[maser['identifier']],
+            name=f'Maser {maser["identifier"]}'
+        ))
+
+    # Plot other galaxies (excluding masers)
+    for galaxy in galaxy_data:
+        if galaxy['distance_method'] == 'DMmas':  # Skip masers already plotted
+            continue
+        position = equatorial_to_cartesian(float(galaxy['ra']), float(galaxy['dec']), galaxy['distance_mpc'])
+        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
+        dist_from_axis = np.linalg.norm(adjusted_position - np.dot(adjusted_position, rotation_axis) * rotation_axis)
+        dist_along_axis = np.dot(adjusted_position, rotation_axis)
+
+        fig.add_trace(go.Scatter(
+            x=[dist_from_axis * scale_factor],
+            y=[dist_along_axis * scale_factor],
+            mode='markers',
+            marker=dict(size=2, color='gray'),
+            text=[galaxy['identifier']],
+            name='Galaxy'
+        ))
+
+    # Update layout
+    fig.update_layout(
+        xaxis_title="Scaled Distance from Rotation Axis",
+        yaxis_title="Scaled Distance along Rotation Axis",
+        title=f"2D Projection of Cosmic Objects (Scale Factor: {scale_factor})"
+    )
+
+    # Save the visualization
+    plot_file = "2d_projection_visualization.html"
+    fig.write_html(plot_file)
+    print(f"[edd_data_analysis] 2D projection visualization saved as '{plot_file}'")
+    return plot_file
+
+
 
 def main():
-    global total_galaxies, galaxies_processed, galaxies_with_redshift, distance_min, distance_max, maser_data
+    global total_galaxies, galaxies_processed, galaxies_with_redshift, distance_min, distance_max, maser_data, galaxy_data
+
+    # Initialize the galaxy_data list
+    galaxy_data = []
 
     # Load and process the EDD XML file
     edd_rows = process_xml_file("eddtable.xml", {'votable': 'http://www.ivoa.net/xml/VOTable/v1.2'})
@@ -630,8 +689,8 @@ def main():
     try:
         with open(csv_file_path, mode='w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(["Source_Name", "Distance_Mpc", "Redshift_Velocity", "Distance_Method", "RA", "Dec", 
-                                 "Gal_Lon", "Gal_Lat", "Frame_Dragging_Effect"])
+            csv_writer.writerow(["Source_Name", "Distance_Mpc", "Redshift_Velocity", "Distance_Method", 
+                                 "RA", "Dec", "Gal_Lon", "Gal_Lat", "Frame_Dragging_Effect"])
 
             # Process EDD data
             for row in edd_rows:
@@ -666,6 +725,14 @@ def main():
                                 break
                         except ValueError:
                             continue
+
+                if distance_mpc is None and not np.isnan(redshift_velocity):
+                    # Estimate distance using Hubble's Law
+                    distance_mpc = redshift_velocity / H0
+                    if redshift_velocity < 1000:  # Filter out peculiar velocities
+                        distance_mpc = None
+                    else:
+                        distance_method = 'Redshift'
 
                 if distance_mpc:
                     process_galaxy(csv_writer, pgc_id, distance_mpc, redshift_velocity, distance_method, 
@@ -740,8 +807,8 @@ def main():
     print(f"[edd_data_analysis] Log file '{log_file_path}' created successfully")
 
     # Create visualizations and README
-    plot_3d_file = create_improved_3d_visualization(maser_data, rotation_axis, earth_position)
-    plot_2d_file = create_2d_projection(maser_data, rotation_axis, earth_position)
+    plot_3d_file = create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, earth_position)
+    plot_2d_file = create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position)
     create_html_page(plot_3d_file, plot_2d_file)
     create_readme(maser_data, rotation_axis, median_angular_velocity, optimal_omega, 
                   optimal_axis_ra, optimal_axis_dec, cmb_dipole_axis, cmb_quadrupole_axis, earth_position)
@@ -751,3 +818,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
