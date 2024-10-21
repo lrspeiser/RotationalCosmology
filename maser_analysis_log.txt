@@ -6,8 +6,8 @@ Galaxies with maser distances: 5
 Assumed distance to universe center: 4.29e+03 Mpc
 
 Estimated median angular velocity: 4.03e-21 rad/s
-Optimal angular velocity: 1.00e-18 rad/s
-Optimal rotation axis: RA = 0.00°, Dec = 0.00°
+Optimal angular velocity: -5.28e-15 rad/s
+Optimal rotation axis: RA = 3307.00°, Dec = -1538.01°
 
 CMB and Rotation Axis Analysis:
 ===============================

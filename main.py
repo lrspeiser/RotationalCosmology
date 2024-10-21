@@ -34,9 +34,10 @@ galaxies_with_redshift = 0
 distance_min = float('inf')
 distance_max = float('-inf')
 maser_data = []
+galaxy_data = []
 distance_methods = {
     'DMsnIa': 0, 'DMtf': 0, 'DMfp': 0, 'DMsbf': 0,
-    'DMsnII': 0, 'DMtrgb': 0, 'DMcep': 0, 'DMmas': 0
+    'DMsnII': 0, 'DMtrgb': 0, 'DMcep': 0, 'DMmas': 0, 'Redshift': 0
 }
 
 def galactic_to_cartesian(l, b):
@@ -58,10 +59,6 @@ def calculate_universe_rotation_axis():
     rotation_axis /= np.linalg.norm(rotation_axis)  # Normalize
     return rotation_axis
 
-def logarithmic_scale(value, base=10):
-    """Apply a logarithmic transformation to a value."""
-    return np.sign(value) * np.log10(1 + np.abs(value))
-
 def calculate_earth_position(rotation_axis, cmb_dipole_axis):
     perpendicular_component = cmb_dipole_axis - np.dot(cmb_dipole_axis, rotation_axis) * rotation_axis
     perpendicular_component /= np.linalg.norm(perpendicular_component)
@@ -74,94 +71,6 @@ def adjust_coordinates(position, earth_position, rotation_axis):
     perpendicular_component = relative_position - axial_component
     return perpendicular_component + axial_component
 
-def calculate_maser_axis_distance(position, earth_position, rotation_axis):
-    """
-    Calculate the distance from a maser to the rotation axis.
-
-    :param position: Maser's position vector
-    :param earth_position: Earth's position vector
-    :param rotation_axis: Unit vector of the rotation axis
-    :return: Distance to the rotation axis in Mpc
-    """
-    adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-    perpendicular_component = adjusted_position - np.dot(adjusted_position, rotation_axis) * rotation_axis
-    return np.linalg.norm(perpendicular_component)
-
-def create_plotly_3d_visualization(maser_data, rotation_axis, earth_position):
-    """
-    Create a 3D Plotly visualization with the maser data, rotation axis, and Earth.
-    """
-    fig = go.Figure()
-
-    # Plot Earth
-    fig.add_trace(go.Scatter3d(
-        x=[earth_position[0]],
-        y=[earth_position[1]],
-        z=[earth_position[2]],
-        mode='markers+text',
-        marker=dict(size=10, color='blue'),
-        text=['Earth'],
-        name='Earth'
-    ))
-
-    # Plot masers
-    maser_x, maser_y, maser_z = [], [], []
-    for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        maser_x.append(adjusted_position[0])
-        maser_y.append(adjusted_position[1])
-        maser_z.append(adjusted_position[2])
-
-    fig.add_trace(go.Scatter3d(
-        x=maser_x, y=maser_y, z=maser_z,
-        mode='markers',
-        marker=dict(size=5, color='red'),
-        text=[maser['identifier'] for maser in maser_data],
-        name='Masers'
-    ))
-
-    # Plot rotation axis
-    axis_length = max(max(abs(np.array(maser_x))), max(abs(np.array(maser_y))), max(abs(np.array(maser_z))))
-    fig.add_trace(go.Scatter3d(
-        x=[-rotation_axis[0] * axis_length, rotation_axis[0] * axis_length],
-        y=[-rotation_axis[1] * axis_length, rotation_axis[1] * axis_length],
-        z=[-rotation_axis[2] * axis_length, rotation_axis[2] * axis_length],
-        mode='lines',
-        line=dict(color='green', width=5),
-        name='Rotation Axis'
-    ))
-
-    # Add rotation direction indicator
-    arrow_length = axis_length * 0.2
-    arrow_end = np.cross(rotation_axis, [0, 0, 1]) * arrow_length
-    fig.add_trace(go.Scatter3d(
-        x=[0, arrow_end[0]],
-        y=[0, arrow_end[1]],
-        z=[0, arrow_end[2]],
-        mode='lines',
-        line=dict(color='orange', width=5),
-        name='Rotation Direction'
-    ))
-
-    # Update layout
-    fig.update_layout(
-        scene=dict(
-            xaxis_title='X (Mpc)',
-            yaxis_title='Y (Mpc)',
-            zaxis_title='Z (Mpc)',
-            aspectmode='data'
-        ),
-        title="Universe with Rotation Axis at Center",
-        showlegend=True
-    )
-
-    # Save the figure
-    plot_file = "universe_rotation_visualization.html"
-    fig.write_html(plot_file)
-    print(f"[edd_data_analysis] 3D visualization saved as '{plot_file}'")
-    return plot_file
-
 def equatorial_to_cartesian(ra, dec, distance):
     ra_rad = np.radians(ra)
     dec_rad = np.radians(dec)
@@ -170,38 +79,95 @@ def equatorial_to_cartesian(ra, dec, distance):
     z = distance * np.sin(dec_rad)
     return np.array([x, y, z])
 
-def estimate_angular_velocity(maser_data, earth_position, rotation_axis):
-    """Estimate the angular velocity of the universe based on maser data"""
-    angular_velocities = []
+def calculate_distance_from_axis(position, rotation_axis):
+    """
+    Calculate the shortest distance from a point to the rotation axis.
+    """
+    projection_length = np.dot(position, rotation_axis)
+    projection_vector = projection_length * rotation_axis
+    perpendicular_vector = position - projection_vector
+    distance_from_axis = np.linalg.norm(perpendicular_vector)
+    return distance_from_axis
 
-    for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        axis_distance = calculate_maser_axis_distance(position, earth_position, rotation_axis)
-        observed_z = maser['redshift_velocity'] / SPEED_OF_LIGHT
+def calculate_tangential_velocity(distance_from_axis, angular_velocity):
+    return angular_velocity * distance_from_axis * 3.086e22  # Convert Mpc to meters
 
-        # Invert the redshift formula to solve for angular velocity
-        v_t = SPEED_OF_LIGHT * (observed_z**2 + 2*observed_z) / (2 + 2*observed_z + observed_z**2)
-        omega = v_t / (axis_distance * 3.086e22)  # Convert Mpc to meters
+def calculate_line_of_sight_unit_vector(position, earth_position):
+    los_vector = position - earth_position
+    return los_vector / np.linalg.norm(los_vector)
 
-        angular_velocities.append({
-            'identifier': maser['identifier'],
-            'omega': omega,
-            'maser_distance': maser['maser_distance'],
-            'axis_distance': axis_distance,
-            'observed_z': observed_z
+def calculate_tangential_velocity_vector(position, rotation_axis, tangential_speed):
+    """
+    Calculate the tangential velocity vector of a point due to rotation.
+    """
+    radius_vector = position - np.dot(position, rotation_axis) * rotation_axis
+    radius_unit_vector = radius_vector / np.linalg.norm(radius_vector)
+    tangential_velocity_vector = np.cross(rotation_axis, radius_unit_vector) * tangential_speed
+    return tangential_velocity_vector
+
+def calculate_rotational_redshift(earth_velocity_vector, galaxy_velocity_vector, los_unit_vector):
+    relative_velocity = galaxy_velocity_vector - earth_velocity_vector
+    velocity_along_los = np.dot(relative_velocity, los_unit_vector)
+    return velocity_along_los / SPEED_OF_LIGHT
+
+def redshift_to_distance(z_cosmological, H0=70):
+    """
+    Estimate distance from cosmological redshift using Hubble's Law.
+    """
+    velocity = z_cosmological * SPEED_OF_LIGHT  # km/s
+    distance = velocity / H0  # Mpc
+    return distance
+
+def process_galaxy(csv_writer, identifier, distance_mpc, redshift_velocity, distance_method, ra, dec, glon, glat):
+    global galaxies_processed, galaxies_with_redshift, distance_min, distance_max
+
+    galaxies_processed += 1
+    if not np.isnan(distance_mpc):
+        distance_min = min(distance_min, distance_mpc)
+        distance_max = max(distance_max, distance_mpc)
+
+    if not np.isnan(redshift_velocity):
+        galaxies_with_redshift += 1
+
+    if distance_method == 'DMmas':
+        frame_dragging_effect = calculate_frame_dragging_effect(1e40, 1e20, distance_mpc * 3.262e6)
+    else:
+        frame_dragging_effect = np.nan
+
+    csv_writer.writerow([identifier, distance_mpc, redshift_velocity, distance_method, ra, dec, glon, glat, frame_dragging_effect])
+
+    # Store galaxy data
+    galaxy_data.append({
+        'identifier': identifier,
+        'distance_mpc': distance_mpc,
+        'redshift_velocity': redshift_velocity,
+        'distance_method': distance_method,
+        'ra': ra,
+        'dec': dec,
+        'glon': glon,
+        'glat': glat,
+        'frame_dragging_effect': frame_dragging_effect
+    })
+
+    if distance_method == 'DMmas':
+        maser_data.append({
+            'identifier': identifier,
+            'maser_distance': distance_mpc,
+            'redshift_velocity': redshift_velocity,
+            'ra': ra,
+            'dec': dec,
+            'glon': glon,
+            'glat': glat,
+            'frame_dragging_effect': frame_dragging_effect
         })
 
-    return angular_velocities
-
-
-import numpy as np
-import plotly.graph_objs as go
-
-def scale_positions(positions, scale_factor=1e-6):
-    """
-    Scale positions to bring them closer to origin while preserving relative distances.
-    """
-    return positions * scale_factor
+def create_visualizations(maser_data, galaxy_data, rotation_axis, earth_position):
+    # Create improved 3D visualization
+    plot_3d_file = create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, earth_position)
+    # Create 2D projection
+    plot_2d_file = create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position)
+    # Create HTML page
+    create_html_page(plot_3d_file, plot_2d_file)
 
 def create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, earth_position):
     fig = go.Figure()
@@ -223,12 +189,10 @@ def create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, ear
     # Plot masers
     maser_x, maser_y, maser_z = [], [], []
     for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        scaled_position = adjusted_position * scale_factor
-        maser_x.append(scaled_position[0])
-        maser_y.append(scaled_position[1])
-        maser_z.append(scaled_position[2])
+        adjusted_position = maser['adjusted_position'] * scale_factor
+        maser_x.append(adjusted_position[0])
+        maser_y.append(adjusted_position[1])
+        maser_z.append(adjusted_position[2])
 
     fig.add_trace(go.Scatter3d(
         x=maser_x, y=maser_y, z=maser_z,
@@ -238,17 +202,15 @@ def create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, ear
         name='Masers'
     ))
 
-    # Plot other galaxies (excluding masers)
+    # Plot other galaxies
     galaxy_x, galaxy_y, galaxy_z = [], [], []
     for galaxy in galaxy_data:
-        if galaxy['distance_method'] == 'DMmas':  # Skip masers already plotted
-            continue
-        position = equatorial_to_cartesian(float(galaxy['ra']), float(galaxy['dec']), galaxy['distance_mpc'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        scaled_position = adjusted_position * scale_factor
-        galaxy_x.append(scaled_position[0])
-        galaxy_y.append(scaled_position[1])
-        galaxy_z.append(scaled_position[2])
+        if galaxy['distance_method'] == 'DMmas':
+            continue  # Skip masers already plotted
+        adjusted_position = galaxy['adjusted_position'] * scale_factor
+        galaxy_x.append(adjusted_position[0])
+        galaxy_y.append(adjusted_position[1])
+        galaxy_z.append(adjusted_position[2])
 
     fig.add_trace(go.Scatter3d(
         x=galaxy_x, y=galaxy_y, z=galaxy_z,
@@ -289,328 +251,12 @@ def create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, ear
     print(f"[edd_data_analysis] Improved 3D visualization saved as '{plot_file}'")
     return plot_file
 
-
-def create_static_2d_distance_speed_graph(maser_data):
-    distances = [maser['maser_distance'] for maser in maser_data]
-    speeds = [maser['redshift_velocity'] for maser in maser_data]
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(distances, speeds)
-    plt.xlabel('Distance from Earth (Mpc)')
-    plt.ylabel('Rotational Speed (km/s)')
-    plt.title('Distance vs Rotational Speed for Masers')
-
-    # Save plot as PNG file
-    plot_2d_file = "distance_vs_speed_graph.png"
-    plt.savefig(plot_2d_file)
-    plt.close()
-
-    print(f"[edd_data_analysis] Static 2D graph saved as '{plot_2d_file}'")
-
-    return plot_2d_file
-
-
-def calculate_rotation_axis(optimal_ra, optimal_dec):
-    """Calculate the rotation axis in Cartesian coordinates"""
-    coord = SkyCoord(ra=optimal_ra*u.degree, dec=optimal_dec*u.degree, frame='icrs')
-    galactic = coord.galactic
-    return galactic_to_cartesian(galactic.l.degree, galactic.b.degree)
-
-def calculate_frame_dragging_effect(mass, radius, distance_ly):
-    """
-    Calculate frame-dragging angular velocity based on mass, radius, and distance.
-    mass: Mass of the object in kg
-    radius: Radius of the object in meters
-    distance_ly: Distance from the center of the universe in light years
-    """
-    distance_meters = distance_ly * 9.461e15  # Convert light years to meters
-
-    # Calculate angular momentum J = (2/5) * M * R^2 * (v/R)
-    angular_momentum = (2 / 5) * mass * radius**2 * (SPEED_OF_LIGHT / radius)
-
-    # Frame dragging angular velocity Omega_LT = (2 * G * J) / (c^2 * r^3)
-    frame_dragging_omega = (2 * GRAVITATIONAL_CONSTANT * angular_momentum) / (SPEED_OF_LIGHT**2 * distance_meters**3)
-
-    return frame_dragging_omega
-
-def calculate_maser_positions(maser_data, rotation_axis):
-    maser_positions = []
-    for maser in maser_data:
-        ra = float(maser['ra'])
-        dec = float(maser['dec'])
-        distance = maser['maser_distance']
-
-        # Convert spherical coordinates to Cartesian
-        x = distance * np.cos(np.radians(dec)) * np.cos(np.radians(ra))
-        y = distance * np.cos(np.radians(dec)) * np.sin(np.radians(ra))
-        z = distance * np.sin(np.radians(dec))
-
-        # Translate coordinates to make rotation axis the origin
-        x -= rotation_axis[0] * UNIVERSE_RADIUS
-        y -= rotation_axis[1] * UNIVERSE_RADIUS
-        z -= rotation_axis[2] * UNIVERSE_RADIUS
-
-        maser_positions.append((x, y, z))
-
-    return maser_positions
-
-
-def create_readme(maser_data, rotation_axis, median_angular_velocity, optimal_omega, optimal_axis_ra, optimal_axis_dec, cmb_dipole_axis, cmb_quadrupole_axis, earth_position):
-    readme_content = f"""
-# Rotating Universe Model Analysis
-
-## Overview
-
-This document summarizes the analysis of a hypothetical rotating universe model based on maser data and CMB observations.
-
-## General Statistics
-
-- **Total galaxies processed**: {total_galaxies}
-- **Galaxies with maser distances**: {len(maser_data)}
-- **Assumed distance to universe center**: {UNIVERSE_RADIUS:.2e} light years
-
-## Rotation Parameters
-
-- **Estimated median angular velocity**: {median_angular_velocity:.2e} rad/s
-- **Optimal angular velocity**: {optimal_omega:.2e} rad/s
-- **Optimal rotation axis**: RA = {np.degrees(optimal_axis_ra):.2f}°, Dec = {np.degrees(optimal_axis_dec):.2f}°
-
-## CMB and Rotation Axis Analysis
-
-| Axis | X | Y | Z |
-|------|---|---|---|
-| Rotation Axis | {rotation_axis[0]:.4f} | {rotation_axis[1]:.4f} | {rotation_axis[2]:.4f} |
-| CMB Dipole Axis | {cmb_dipole_axis[0]:.4f} | {cmb_dipole_axis[1]:.4f} | {cmb_dipole_axis[2]:.4f} |
-| CMB Quadrupole/Octupole Axis | {cmb_quadrupole_axis[0]:.4f} | {cmb_quadrupole_axis[1]:.4f} | {cmb_quadrupole_axis[2]:.4f} |
-
-- **Angle between Rotation Axis and CMB Dipole**: {np.arccos(np.dot(rotation_axis, cmb_dipole_axis)) * 180 / np.pi:.2f} degrees
-- **Angle between Rotation Axis and CMB Quadrupole/Octupole**: {np.arccos(np.dot(rotation_axis, cmb_quadrupole_axis)) * 180 / np.pi:.2f} degrees
-
-## Earth and Maser Data
-
-### Earth
-
-- **Position**: ({earth_position[0]:.2f}, {earth_position[1]:.2f}, {earth_position[2]:.2f}) Mpc
-
-### Maser Data
-
-"""
-
-    for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        axis_distance = calculate_maser_axis_distance(position, earth_position, rotation_axis)
-
-        readme_content += f"""
-#### Maser {maser['identifier']}
-- **Distance from Earth**: {maser['maser_distance']:.2f} Mpc
-- **Observed Redshift**: {maser['redshift_velocity'] / SPEED_OF_LIGHT:.6f}
-- **Distance to rotation axis**: {axis_distance:.2f} Mpc
-- **Original Coordinates**: ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f}) Mpc
-- **Adjusted Coordinates**: ({adjusted_position[0]:.2f}, {adjusted_position[1]:.2f}, {adjusted_position[2]:.2f}) Mpc
-"""
-
-    readme_content += """
-## Notes
-
-- The rotation axis is positioned at the center of the universe (0, 0, 0).
-- Earth's position is calculated based on the CMB dipole and estimated rotation of the universe.
-- Maser coordinates are adjusted relative to the central rotation axis.
-- This model is highly speculative and should be interpreted with caution. It does not reflect the current scientific understanding of the universe's structure and dynamics.
-- The visualization of this data can be found in the accompanying 3D plot file.
-"""
-
-    # Write README file
-    with open('README.md', 'w') as readme_file:
-        readme_file.write(readme_content)
-
-    print("[edd_data_analysis] README.md file created successfully")
-    
-
-def create_distance_speed_graph(maser_data):
-    distances = [maser['maser_distance'] for maser in maser_data]
-    speeds = [maser['redshift_velocity'] for maser in maser_data]
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(distances, speeds)
-    plt.xlabel('Distance from Earth (Mpc)')
-    plt.ylabel('Rotational Speed (km/s)')
-    plt.title('Distance vs Rotational Speed for Masers')
-
-    # Save plot to a base64 encoded string
-    buffer = BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    plot_data = base64.b64encode(buffer.getvalue()).decode()
-    plt.close()
-
-    return plot_data
-
-def create_html_page(plot_3d_file, plot_2d_file):
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Maser Visualization</title>
-    </head>
-    <body>
-        <h1>Maser Visualization</h1>
-        <h2>Interactive 3D Visualization of Maser Positions</h2>
-        <p><a href="{plot_3d_file}" target="_blank">Click here to view the interactive 3D visualization</a></p>
-        <h2>Distance vs Rotational Speed Graph</h2>
-        <img src="{plot_2d_file}" alt="Distance vs Speed Graph">
-    </body>
-    </html>
-    """
-
-    with open('maser_visualization.html', 'w') as f:
-        f.write(html_content)
-
-    print("[edd_data_analysis] HTML page with links created: 'maser_visualization.html'")
-
-
-def process_xml_file(file_path, namespace):
-    try:
-        tree = ET.parse(file_path)
-        root = tree.getroot()
-        print(f"[edd_data_analysis] {file_path} loaded successfully")
-
-        table_data = root.find(".//votable:TABLEDATA", namespace)
-        rows = table_data.findall("votable:TR", namespace) if table_data is not None else []
-
-        if not rows:
-            raise ValueError("No data rows found in XML file")
-
-        print(f"[edd_data_analysis] Found {len(rows)} rows of data in {file_path}")
-        return rows
-    except Exception as e:
-        print(f"[edd_data_analysis] Error processing {file_path}: {e}")
-        return []
-
-def process_galaxy(csv_writer, identifier, distance_mpc, redshift_velocity, distance_method, ra, dec, glon, glat):
-    global galaxies_processed, galaxies_with_redshift, distance_min, distance_max
-
-    galaxies_processed += 1
-    if not np.isnan(distance_mpc):
-        distance_min = min(distance_min, distance_mpc)
-        distance_max = max(distance_max, distance_mpc)
-
-    if not np.isnan(redshift_velocity):
-        galaxies_with_redshift += 1
-
-    if distance_method == 'DMmas':
-        galaxy_mass = 1e40  # mass in kg (dummy value)
-        galaxy_radius = 1e20  # radius in meters (simplified)
-        distance_ly = distance_mpc * 3.262e6  # Convert Mpc to light years
-        frame_dragging_effect = calculate_frame_dragging_effect(galaxy_mass, galaxy_radius, distance_ly)
-    else:
-        frame_dragging_effect = np.nan
-
-    csv_writer.writerow([identifier, distance_mpc, redshift_velocity, distance_method, ra, dec, glon, glat, frame_dragging_effect])
-
-    # Add to galaxy_data
-    galaxy_data.append({
-        'identifier': identifier,
-        'distance_mpc': distance_mpc,
-        'redshift_velocity': float(redshift_velocity) if not np.isnan(redshift_velocity) else None,
-        'distance_method': distance_method,
-        'ra': ra,
-        'dec': dec,
-        'glon': glon,
-        'glat': glat,
-        'frame_dragging_effect': frame_dragging_effect
-    })
-
-    if distance_method == 'DMmas' and not np.isnan(redshift_velocity):
-        maser_data.append({
-            'identifier': identifier,
-            'maser_distance': distance_mpc,
-            'redshift_velocity': float(redshift_velocity),
-            'ra': ra,
-            'dec': dec,
-            'glon': glon,
-            'glat': glat,
-            'frame_dragging_effect': frame_dragging_effect
-        })
-        print(f"[process_galaxy] Extracted maser data for {identifier}")
-
-
-def create_maser_xml():
-    print("[edd_data_analysis] Creating XML file for maser data")
-
-    root = ET.Element("MaserData")
-
-    for maser in maser_data:
-        maser_element = ET.SubElement(root, "Maser")
-        ET.SubElement(maser_element, "Identifier").text = maser['identifier']
-        ET.SubElement(maser_element, "MaserDistanceMpc").text = f"{maser['maser_distance']:.2f}"
-        ET.SubElement(maser_element, "RedshiftVelocity").text = f"{maser['redshift_velocity']:.2f}"
-        ET.SubElement(maser_element, "RA").text = maser['ra']
-        ET.SubElement(maser_element, "Dec").text = maser['dec']
-        ET.SubElement(maser_element, "GalacticLongitude").text = maser['glon']
-        ET.SubElement(maser_element, "GalacticLatitude").text = maser['glat']
-        ET.SubElement(maser_element, "FrameDraggingEffect").text = f"{maser['frame_dragging_effect']:.6e}"
-
-    tree = ET.ElementTree(root)
-    xml_file_path = "maser_edd.xml"
-    tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)
-    print(f"[edd_data_analysis] XML file '{xml_file_path}' created successfully")
-
-def calculate_rotational_redshift(position, omega, axis):
-    """
-    Calculate the redshift due to rotation in a hypothetical rotating universe.
-
-    :param position: 3D position vector of the object in Mpc
-    :param omega: Angular velocity vector of the universe in rad/s
-    :param axis: Rotation axis unit vector
-    :return: Calculated redshift
-    """
-    # Convert position to meters
-    position_m = position * 3.086e22  # Convert Mpc to meters
-
-    # Calculate tangential velocity
-    v = np.cross(omega, position_m)
-    v_t = np.linalg.norm(v)
-
-    # Check if tangential velocity exceeds speed of light
-    if v_t >= SPEED_OF_LIGHT:
-        return np.inf  # Return infinity for superluminal velocities
-
-    # Calculate redshift
-    z = np.sqrt((1 + v_t / SPEED_OF_LIGHT) / (1 - v_t / SPEED_OF_LIGHT)) - 1
-
-    return z
-
-
-
-# Define the objective_function
-def objective_function(params):
-    omega_magnitude, axis_ra, axis_dec = params
-    axis = equatorial_to_cartesian(axis_ra, axis_dec, 1)  # Unit vector
-    omega = omega_magnitude * axis
-    total_error = 0
-
-    for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        observed_z = maser['redshift_velocity'] / SPEED_OF_LIGHT
-
-        calculated_z = calculate_rotational_redshift(position, omega, axis)
-
-        if np.isinf(calculated_z):
-            total_error += 1e6  # Large penalty for superluminal velocities
-        else:
-            total_error += (observed_z - calculated_z)**2
-
-    return total_error
-
 def create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position):
     fig = go.Figure()
     scale_factor = 1e-6
 
-    # Calculate Earth's distances from and along the rotation axis
-    earth_dist_from_axis = np.linalg.norm(earth_position - np.dot(earth_position, rotation_axis) * rotation_axis)
+    # Earth's distances from and along the rotation axis
+    earth_dist_from_axis = calculate_distance_from_axis(earth_position, rotation_axis)
     earth_dist_along_axis = np.dot(earth_position, rotation_axis)
 
     fig.add_trace(go.Scatter(
@@ -624,9 +270,8 @@ def create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position)
 
     # Plot masers
     for maser in maser_data:
-        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        dist_from_axis = np.linalg.norm(adjusted_position - np.dot(adjusted_position, rotation_axis) * rotation_axis)
+        adjusted_position = maser['adjusted_position']
+        dist_from_axis = calculate_distance_from_axis(adjusted_position, rotation_axis)
         dist_along_axis = np.dot(adjusted_position, rotation_axis)
 
         fig.add_trace(go.Scatter(
@@ -638,13 +283,12 @@ def create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position)
             name=f'Maser {maser["identifier"]}'
         ))
 
-    # Plot other galaxies (excluding masers)
+    # Plot other galaxies
     for galaxy in galaxy_data:
-        if galaxy['distance_method'] == 'DMmas':  # Skip masers already plotted
+        if galaxy['distance_method'] == 'DMmas':
             continue
-        position = equatorial_to_cartesian(float(galaxy['ra']), float(galaxy['dec']), galaxy['distance_mpc'])
-        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
-        dist_from_axis = np.linalg.norm(adjusted_position - np.dot(adjusted_position, rotation_axis) * rotation_axis)
+        adjusted_position = galaxy['adjusted_position']
+        dist_from_axis = calculate_distance_from_axis(adjusted_position, rotation_axis)
         dist_along_axis = np.dot(adjusted_position, rotation_axis)
 
         fig.add_trace(go.Scatter(
@@ -669,6 +313,267 @@ def create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position)
     print(f"[edd_data_analysis] 2D projection visualization saved as '{plot_file}'")
     return plot_file
 
+def create_html_page(plot_3d_file, plot_2d_file):
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Maser Visualization</title>
+    </head>
+    <body>
+        <h1>Maser Visualization</h1>
+        <h2>Interactive 3D Visualization of Maser Positions</h2>
+        <p><a href="{plot_3d_file}" target="_blank">Click here to view the interactive 3D visualization</a></p>
+        <h2>Distance vs Rotational Speed Graph</h2>
+        <p><a href="{plot_2d_file}" target="_blank">Click here to view the 2D projection visualization</a></p>
+    </body>
+    </html>
+    """
+
+    with open('maser_visualization.html', 'w') as f:
+        f.write(html_content)
+
+    print("[edd_data_analysis] HTML page with links created: 'maser_visualization.html'")
+
+def calculate_frame_dragging_effect(mass, radius, distance_ly):
+    """
+    Calculate frame-dragging angular velocity based on mass, radius, and distance.
+    """
+    distance_meters = distance_ly * 9.461e15  # Convert light years to meters
+
+    # Calculate angular momentum J = (2/5) * M * R^2 * (v/R)
+    angular_momentum = (2 / 5) * mass * radius**2 * (SPEED_OF_LIGHT / radius)
+
+    # Frame dragging angular velocity Omega_LT = (2 * G * J) / (c^2 * r^3)
+    frame_dragging_omega = (2 * GRAVITATIONAL_CONSTANT * angular_momentum) / (SPEED_OF_LIGHT**2 * distance_meters**3)
+
+    return frame_dragging_omega
+
+def process_xml_file(file_path, namespace):
+    try:
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+        print(f"[edd_data_analysis] {file_path} loaded successfully")
+
+        table_data = root.find(".//votable:TABLEDATA", namespace)
+        rows = table_data.findall("votable:TR", namespace) if table_data is not None else []
+
+        if not rows:
+            raise ValueError("No data rows found in XML file")
+
+        print(f"[edd_data_analysis] Found {len(rows)} rows of data in {file_path}")
+        return rows
+    except Exception as e:
+        print(f"[edd_data_analysis] Error processing {file_path}: {e}")
+        return []
+
+def create_maser_xml():
+    print("[edd_data_analysis] Creating XML file for maser data")
+
+    root = ET.Element("MaserData")
+
+    for maser in maser_data:
+        maser_element = ET.SubElement(root, "Maser")
+        ET.SubElement(maser_element, "Identifier").text = maser['identifier']
+        ET.SubElement(maser_element, "MaserDistanceMpc").text = f"{maser['maser_distance']:.2f}"
+        ET.SubElement(maser_element, "RedshiftVelocity").text = f"{maser['redshift_velocity']:.2f}"
+        ET.SubElement(maser_element, "RA").text = maser['ra']
+        ET.SubElement(maser_element, "Dec").text = maser['dec']
+        ET.SubElement(maser_element, "GalacticLongitude").text = maser['glon']
+        ET.SubElement(maser_element, "GalacticLatitude").text = maser['glat']
+        ET.SubElement(maser_element, "FrameDraggingEffect").text = f"{maser['frame_dragging_effect']:.6e}"
+
+    tree = ET.ElementTree(root)
+    xml_file_path = "maser_edd.xml"
+    tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)
+    print(f"[edd_data_analysis] XML file '{xml_file_path}' created successfully")
+
+def export_eddstar_data_to_csv(galaxy_data, output_file="eddstar_data.csv"):
+    """
+    Export EDD star data with adjusted coordinates, rotational velocities, and redshifts to a CSV file.
+    The data is sorted by rotational velocity from slowest to fastest.
+    """
+    # Filter out galaxies with missing tangential velocity
+    valid_galaxies = [g for g in galaxy_data if g.get('tangential_velocity') is not None]
+
+    # Sort galaxies by tangential velocity (slowest to fastest)
+    sorted_galaxies = sorted(valid_galaxies, key=lambda g: g['tangential_velocity'])
+
+    # Write sorted data to CSV
+    with open(output_file, mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        # Write header
+        csv_writer.writerow([
+            "Identifier", "Distance_Mpc", "RA", "Dec", "Adjusted_X", "Adjusted_Y", "Adjusted_Z",
+            "Tangential_Velocity (m/s)", "Observed_Redshift", "Rotational_Redshift", 
+            "Cosmological_Redshift", "Corrected_Distance_Mpc"
+        ])
+
+        # Write data rows
+        for galaxy in sorted_galaxies:
+            adjusted_position = galaxy['adjusted_position']
+            csv_writer.writerow([
+                galaxy['identifier'],
+                galaxy['distance_mpc'],
+                galaxy['ra'],
+                galaxy['dec'],
+                f"{adjusted_position[0]:.6f}",
+                f"{adjusted_position[1]:.6f}",
+                f"{adjusted_position[2]:.6f}",
+                f"{galaxy['tangential_velocity']:.6e}",
+                f"{galaxy['z_observed']:.6f}",
+                f"{galaxy['z_rotation']:.6f}",
+                f"{galaxy['z_cosmological']:.6f}",
+                f"{galaxy['distance_mpc_corrected']:.6f}"
+            ])
+
+    print(f"[edd_data_analysis] EDD star data exported to '{output_file}' successfully.")
+
+
+# Define the objective_function
+def objective_function(params):
+    omega_magnitude, axis_ra, axis_dec = params
+    axis = equatorial_to_cartesian(axis_ra, axis_dec, 1)  # Unit vector
+    omega = omega_magnitude * axis
+    total_error = 0
+
+    for maser in maser_data:
+        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
+        observed_z = maser['redshift_velocity'] / SPEED_OF_LIGHT
+
+        calculated_z = calculate_rotational_redshift(position, omega, axis)
+
+        if np.isinf(calculated_z):
+            total_error += 1e6  # Large penalty for superluminal velocities
+        else:
+            total_error += (observed_z - calculated_z)**2
+
+    return total_error
+
+def create_readme(maser_data, rotation_axis, median_angular_velocity, optimal_omega, optimal_axis_ra, optimal_axis_dec, cmb_dipole_axis, cmb_quadrupole_axis, earth_position):
+    readme_content = f"""
+# Rotating Universe Model Analysis
+
+## Overview
+
+This document summarizes the analysis of a hypothetical rotating universe model based on maser data and CMB observations.
+
+## General Statistics
+
+- **Total galaxies processed**: {total_galaxies}
+- **Galaxies with maser distances**: {len(maser_data)}
+- **Assumed distance to universe center**: {UNIVERSE_RADIUS:.2e} Mpc
+
+## Rotation Parameters
+
+- **Estimated median angular velocity**: {median_angular_velocity:.2e} rad/s
+- **Optimal angular velocity**: {optimal_omega:.2e} rad/s
+- **Optimal rotation axis**: RA = {np.degrees(optimal_axis_ra):.2f}°, Dec = {np.degrees(optimal_axis_dec):.2f}°
+
+## CMB and Rotation Axis Analysis
+
+| Axis | X | Y | Z |
+|------|---|---|---|
+| Rotation Axis | {rotation_axis[0]:.4f} | {rotation_axis[1]:.4f} | {rotation_axis[2]:.4f} |
+| CMB Dipole Axis | {cmb_dipole_axis[0]:.4f} | {cmb_dipole_axis[1]:.4f} | {cmb_dipole_axis[2]:.4f} |
+| CMB Quadrupole/Octupole Axis | {cmb_quadrupole_axis[0]:.4f} | {cmb_quadrupole_axis[1]:.4f} | {cmb_quadrupole_axis[2]:.4f} |
+
+- **Angle between Rotation Axis and CMB Dipole**: {np.arccos(np.dot(rotation_axis, cmb_dipole_axis)) * 180 / np.pi:.2f} degrees
+- **Angle between Rotation Axis and CMB Quadrupole/Octupole**: {np.arccos(np.dot(rotation_axis, cmb_quadrupole_axis)) * 180 / np.pi:.2f} degrees
+
+## Reliability of Rotation Axis Estimation
+
+Given that we only have data from **five maser galaxies**, the reliability of our rotation axis estimation is limited. With such a small sample size, it's challenging to accurately triangulate the exact location and orientation of the rotation axis. The estimation is more of an educated guess based on the available data and certain assumptions:
+
+- **Assumptions Made**:
+  - We assume that the rotation axis is aligned in some way with the Cosmic Microwave Background (CMB) dipole and quadrupole axes.
+  - We consider Earth's position relative to these axes to estimate its location in the universe.
+  - The maser galaxies are assumed to be representative of the larger cosmic structure, which may not be the case.
+
+- **Limitations**:
+  - **Sample Size**: Five data points are insufficient for precise triangulation in three-dimensional space.
+  - **Measurement Errors**: Uncertainties in distance measurements and redshift velocities can significantly affect the estimation.
+  - **Simplifications in the Model**: The model assumes a simple rotational motion without accounting for complex gravitational interactions and local motions.
+
+Therefore, while the rotation axis estimation provides a starting point for our hypothetical model, it should not be considered precise. More data points and a more sophisticated model would be required for a reliable determination.
+
+## Earth and Maser Data
+
+### Earth
+
+- **Position**: ({earth_position[0]:.2f}, {earth_position[1]:.2f}, {earth_position[2]:.2f}) Mpc
+
+### Maser Data
+
+"""
+
+    for maser in maser_data:
+        adjusted_position = maser['adjusted_position']
+        axis_distance = calculate_distance_from_axis(adjusted_position, rotation_axis)
+
+        readme_content += f"""
+#### Maser {maser['identifier']}
+- **Distance from Earth**: {maser['maser_distance']:.2f} Mpc
+- **Observed Redshift**: {maser['redshift_velocity'] / SPEED_OF_LIGHT:.6f}
+- **Distance to rotation axis**: {axis_distance:.2f} Mpc
+- **Adjusted Coordinates**: ({adjusted_position[0]:.2f}, {adjusted_position[1]:.2f}, {adjusted_position[2]:.2f}) Mpc
+"""
+
+    readme_content += """
+## Notes
+
+- The rotation axis is positioned at the center of the universe (0, 0, 0).
+- Earth's position is calculated based on the CMB dipole and estimated rotation of the universe.
+- Maser coordinates are adjusted relative to the central rotation axis.
+- This model is highly speculative and should be interpreted with caution. It does not reflect the current scientific understanding of the universe's structure and dynamics.
+- The visualization of this data can be found in the accompanying 3D plot file.
+"""
+
+    # Write README file
+    with open('README.md', 'w') as readme_file:
+        readme_file.write(readme_content)
+
+    print("[edd_data_analysis] README.md file created successfully")
+
+
+def estimate_angular_velocity(maser_data, earth_position, rotation_axis):
+    """
+    Estimate the angular velocity of each maser based on its position relative to Earth's position and the rotation axis.
+    """
+    angular_velocities = []
+
+    for maser in maser_data:
+        # Convert RA/Dec to Cartesian coordinates
+        position = equatorial_to_cartesian(
+            float(maser['ra']), float(maser['dec']), maser['maser_distance']
+        )
+
+        # Adjust the position relative to Earth and rotation axis
+        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
+
+        # Calculate the distance from the rotation axis
+        axis_distance = calculate_distance_from_axis(adjusted_position, rotation_axis)
+
+        # Calculate the observed redshift
+        observed_z = maser['redshift_velocity'] / SPEED_OF_LIGHT
+
+        # Calculate tangential velocity from redshift
+        tangential_velocity = SPEED_OF_LIGHT * (observed_z**2 + 2 * observed_z) / (2 + 2 * observed_z + observed_z**2)
+
+        # Calculate the angular velocity (omega = v_t / r)
+        omega = tangential_velocity / (axis_distance * 3.086e22)  # Convert Mpc to meters
+
+        angular_velocities.append({
+            'identifier': maser['identifier'],
+            'omega': omega,
+            'maser_distance': maser['maser_distance'],
+            'axis_distance': axis_distance,
+            'observed_z': observed_z
+        })
+
+    return angular_velocities
 
 
 def main():
@@ -728,11 +633,10 @@ def main():
 
                 if distance_mpc is None and not np.isnan(redshift_velocity):
                     # Estimate distance using Hubble's Law
-                    distance_mpc = redshift_velocity / H0
-                    if redshift_velocity < 1000:  # Filter out peculiar velocities
-                        distance_mpc = None
-                    else:
+                    if redshift_velocity > 1000:  # Avoid peculiar velocities
+                        distance_mpc = redshift_velocity / H0
                         distance_method = 'Redshift'
+                        distance_methods['Redshift'] += 1
 
                 if distance_mpc:
                     process_galaxy(csv_writer, pgc_id, distance_mpc, redshift_velocity, distance_method, 
@@ -755,6 +659,90 @@ def main():
 
     # Calculate Earth's position relative to the universe's rotation axis
     earth_position = calculate_earth_position(rotation_axis, cmb_dipole_axis)
+
+    # Earth's distance from rotation axis and tangential velocity
+    earth_distance_from_axis = calculate_distance_from_axis(earth_position, rotation_axis)
+    earth_tangential_velocity = calculate_tangential_velocity(earth_distance_from_axis, optimal_omega)
+    earth_tangential_vector = calculate_tangential_velocity_vector(earth_position, rotation_axis, earth_tangential_velocity)
+
+    # Process each galaxy
+    for galaxy in galaxy_data:
+        # Skip galaxies without redshift_velocity
+        if galaxy['redshift_velocity'] is None or np.isnan(galaxy['redshift_velocity']):
+            continue
+
+        # Get position
+        position = equatorial_to_cartesian(float(galaxy['ra']), float(galaxy['dec']), galaxy['distance_mpc'])
+        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
+        galaxy['adjusted_position'] = adjusted_position
+
+        # Galaxy's distance from rotation axis
+        galaxy_distance_from_axis = calculate_distance_from_axis(adjusted_position, rotation_axis)
+        galaxy['distance_from_axis'] = galaxy_distance_from_axis
+
+        # Galaxy's tangential velocity
+        galaxy_tangential_velocity = calculate_tangential_velocity(galaxy_distance_from_axis, optimal_omega)
+        galaxy['tangential_velocity'] = galaxy_tangential_velocity
+
+        # Line of sight unit vector
+        los_unit_vector = calculate_line_of_sight_unit_vector(adjusted_position, earth_position)
+
+        # Galaxy's tangential velocity vector
+        galaxy_tangential_vector = calculate_tangential_velocity_vector(adjusted_position, rotation_axis, galaxy_tangential_velocity)
+
+        # Rotational redshift component
+        z_rotation = calculate_rotational_redshift(earth_tangential_vector, galaxy_tangential_vector, los_unit_vector)
+        galaxy['z_rotation'] = z_rotation
+
+        # Observed redshift
+        z_observed = galaxy['redshift_velocity'] / SPEED_OF_LIGHT
+        galaxy['z_observed'] = z_observed
+
+        # Cosmological redshift
+        z_cosmological = z_observed - z_rotation
+        galaxy['z_cosmological'] = z_cosmological
+
+        # Corrected distance
+        galaxy['distance_mpc_corrected'] = redshift_to_distance(z_cosmological)
+
+    # Similarly, process maser data
+    for maser in maser_data:
+        # Get position
+        position = equatorial_to_cartesian(float(maser['ra']), float(maser['dec']), maser['maser_distance'])
+        adjusted_position = adjust_coordinates(position, earth_position, rotation_axis)
+        maser['adjusted_position'] = adjusted_position
+
+        # Maser distance from rotation axis
+        maser_distance_from_axis = calculate_distance_from_axis(adjusted_position, rotation_axis)
+        maser['distance_from_axis'] = maser_distance_from_axis
+
+        # Maser tangential velocity
+        maser_tangential_velocity = calculate_tangential_velocity(maser_distance_from_axis, optimal_omega)
+        maser['tangential_velocity'] = maser_tangential_velocity
+
+        # Line of sight unit vector
+        los_unit_vector = calculate_line_of_sight_unit_vector(adjusted_position, earth_position)
+
+        # Maser tangential velocity vector
+        maser_tangential_vector = calculate_tangential_velocity_vector(adjusted_position, rotation_axis, maser_tangential_velocity)
+
+        # Rotational redshift component
+        z_rotation = calculate_rotational_redshift(earth_tangential_vector, maser_tangential_vector, los_unit_vector)
+        maser['z_rotation'] = z_rotation
+
+        # Observed redshift
+        z_observed = maser['redshift_velocity'] / SPEED_OF_LIGHT
+        maser['z_observed'] = z_observed
+
+        # Cosmological redshift
+        z_cosmological = z_observed - z_rotation
+        maser['z_cosmological'] = z_cosmological
+
+        # Corrected distance
+        maser['distance_mpc_corrected'] = redshift_to_distance(z_cosmological)
+
+    # Create visualizations
+    create_visualizations(maser_data, galaxy_data, rotation_axis, earth_position)
 
     # Estimate angular velocity for each maser and log them
     maser_angular_velocities = estimate_angular_velocity(maser_data, earth_position, rotation_axis)
@@ -806,16 +794,15 @@ def main():
 
     print(f"[edd_data_analysis] Log file '{log_file_path}' created successfully")
 
-    # Create visualizations and README
-    plot_3d_file = create_improved_3d_visualization(maser_data, galaxy_data, rotation_axis, earth_position)
-    plot_2d_file = create_2d_projection(maser_data, galaxy_data, rotation_axis, earth_position)
-    create_html_page(plot_3d_file, plot_2d_file)
+    # Create README
     create_readme(maser_data, rotation_axis, median_angular_velocity, optimal_omega, 
                   optimal_axis_ra, optimal_axis_dec, cmb_dipole_axis, cmb_quadrupole_axis, earth_position)
 
     print("[edd_data_analysis] Analysis complete")
     create_maser_xml()
 
+    # Export EDD star data to CSV
+    export_eddstar_data_to_csv(galaxy_data)
+
 if __name__ == "__main__":
     main()
-
