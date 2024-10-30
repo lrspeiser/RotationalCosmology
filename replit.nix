@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.glibcLocales
     pkgs.xsimd
     pkgs.libxcrypt
     pkgs.tk
