@@ -1124,147 +1124,141 @@ def validate_and_process_coordinates(df, log_func=print):
         return df
 
 
-def create_readme(maser_data, rotation_axis, median_angular_velocity, optimal_omega, optimal_axis_ra, optimal_axis_dec, cmb_dipole_axis, cmb_quadrupole_axis, earth_position):
+def create_readme(maser_data, rotation_axis, median_angular_velocity, optimal_omega, 
+                  optimal_axis_ra, optimal_axis_dec, cmb_dipole_axis, 
+                  cmb_quadrupole_axis, earth_position):
     log("[create_readme] Starting README generation...")
     try:
         readme_content = f"""
-    # Rotating Universe Model Analysis
-    
-    ## Overview
-    
-    This document summarizes the analysis of a hypothetical rotating universe model based on maser data and CMB observations. Instead of assuming the universe is expanding since the big bang, it provides a hypothetical alternative where the universe can be significantly older and the illusion of expansion comes from the frame dragging gravity effects of a Godel inspired rotating universe. In addition, we will explore the possibility of both light and gravity circumnavigating the universe repeatedly, which would give us an alternative explaination to CMB uniformity and the extra gravity we detect but can't attribute to physical objects we can observe. To start, we will begin using the axis of evil calculatings that indicate a direction to CMB, then we will use known celestial object distances that don't use redshift to calculate how much frame dragging would need to happen to generate the redshift we observe. Then we will attempt to estimate our distance from a central axis and chart out what this rotating universe looks like. We will also add data from other data sets, like DESI, to attempt to overlay the large scale structures we see in the universe, in the hopes that this rotating universe helps explain how they formed.
-    
-    ## Analysis Process
-    
-    1. **Data Collection and Processing**
-       - Processed {total_galaxies} galaxies from the EDD database
-       - Identified {len(maser_data)} maser galaxies
-       - Processed supernova data for additional reference points
-       - Created initial combined galaxy dataset
-    
-    2. **Parameter Calculation**
-       - Calculated CMB axes from dipole and quadrupole measurements
-       - Determined universe rotation axis from CMB data
-       - Computed Earth's position relative to the rotation axis
-       - Optimized angular velocity parameters
-    
-    3. **Velocity Analysis**
-       - Calculated tangential velocities for all objects
-       - Computed rotational redshifts
-       - Adjusted cosmological redshifts for rotation effects
-       - Estimated corrected distances
-    
-    4. **Output Generation**
-       - Created comprehensive galaxy CSV dataset
-       - Generated maser-specific XML data
-       - Produced interactive 2D and 3D visualizations
-       - Created rotating visualization model
-    
-    ## General Statistics
-    
-    - **Total galaxies processed**: {total_galaxies}
-    - **Galaxies with maser distances**: {len(maser_data)}
-    - **Galaxies with supernova distances**: {len(supernova_data)}
-    - **Assumed distance to universe center**: {UNIVERSE_RADIUS:.2e} Mpc
-    
-    ## Rotation Parameters
-    
-    - **Estimated median angular velocity**: {median_angular_velocity:.2e} rad/s
-    - **Optimal angular velocity**: {optimal_omega:.2e} rad/s
-    - **Optimal rotation axis**: RA = {np.degrees(optimal_axis_ra):.2f}°, Dec = {np.degrees(optimal_axis_dec):.2f}°
-    
-    ## CMB and Rotation Axis Analysis
-    
-    | Axis | X | Y | Z |
-    |------|---|---|---|
-    | Rotation Axis | {rotation_axis[0]:.4f} | {rotation_axis[1]:.4f} | {rotation_axis[2]:.4f} |
-    | CMB Dipole Axis | {cmb_dipole_axis[0]:.4f} | {cmb_dipole_axis[1]:.4f} | {cmb_dipole_axis[2]:.4f} |
-    | CMB Quadrupole/Octupole Axis | {cmb_quadrupole_axis[0]:.4f} | {cmb_quadrupole_axis[1]:.4f} | {cmb_quadrupole_axis[2]:.4f} |
-    
-    - **Angle between Rotation Axis and CMB Dipole**: {np.arccos(np.dot(rotation_axis, cmb_dipole_axis)) * 180 / np.pi:.2f} degrees
-    - **Angle between Rotation Axis and CMB Quadrupole/Octupole**: {np.arccos(np.dot(rotation_axis, cmb_quadrupole_axis)) * 180 / np.pi:.2f} degrees
-    
-    ## Reliability of Rotation Axis Estimation
-    
-    Given that we only have data from **five maser galaxies**, the reliability of our rotation axis estimation is limited. With such a small sample size, it's challenging to accurately triangulate the exact location and orientation of the rotation axis. The estimation is more of an educated guess based on the available data and certain assumptions:
-    
-    - **Assumptions Made**:
-      - We assume that the rotation axis is aligned in some way with the Cosmic Microwave Background (CMB) dipole and quadrupole axes.
-      - We consider Earth's position relative to these axes to estimate its location in the universe.
-      - The maser galaxies are assumed to be representative of the larger cosmic structure, which may not be the case.
-    
-    - **Limitations**:
-      - **Sample Size**: Five data points are insufficient for precise triangulation in three-dimensional space.
-      - **Measurement Errors**: Uncertainties in distance measurements and redshift velocities can significantly affect the estimation.
-      - **Simplifications in the Model**: The model assumes a simple rotational motion without accounting for complex gravitational interactions and local motions.
-    
-      With the inclusion of **supernova data**, we now have a larger dataset to estimate the rotation axis. Supernovae provide independent distance measurements not reliant on redshift, improving our triangulation capabilities.
-    
-      - **Improvements**:
-        - **Increased Data Points**: The addition of supernovae increases the number of data points significantly.
-        - **Independent Distance Measurements**: Supernova distances are determined via standard candles, reducing reliance on redshift estimates.
-    
-      - **Remaining Limitations**:
-        - **Data Quality**: Supernova measurements may have their own uncertainties and potential biases.
-        - **Assumptions in the Model**: The model still assumes a simple rotational motion.
-    
-      Therefore, while the inclusion of supernova data enhances our model, caution is still advised in interpreting the results.
-    
-    ## Earth and Maser Data
-    
-    ### Earth
-    
-    - **Position**: ({earth_position[0]:.2f}, {earth_position[1]:.2f}, {earth_position[2]:.2f}) Mpc
-    
-    ### Maser Data
-    
-    """
-    
+# Rotating Universe Model Analysis
+
+## Overview
+
+This document summarizes the analysis of a hypothetical rotating universe model based on maser data and CMB observations. Instead of assuming the universe is expanding since the big bang, it provides a hypothetical alternative where the universe can be significantly older, and the illusion of expansion comes from the frame-dragging gravity effects of a Godel-inspired rotating universe. In addition, we explore the possibility of both light and gravity circumnavigating the universe repeatedly, giving an alternative explanation to CMB uniformity and the extra gravity we detect but can't attribute to observable objects. 
+
+To start, we use the axis of evil calculations indicating a direction to the CMB. We then apply known celestial object distances (that don't rely on redshift) to determine how much frame dragging is necessary to generate the observed redshift. We also attempt to estimate our distance from a central axis and chart what this rotating universe looks like. Additional data from sets like DESI will be used to overlay large-scale structures in hopes of explaining their formation through this model.
+
+## Analysis Process
+
+1. **Data Collection and Processing**
+   - Processed {total_galaxies} galaxies from the EDD database
+   - Identified {len(maser_data)} maser galaxies
+   - Processed supernova data for additional reference points
+   - Created initial combined galaxy dataset
+
+2. **Parameter Calculation**
+   - Calculated CMB axes from dipole and quadrupole measurements
+   - Determined universe rotation axis from CMB data
+   - Computed Earth's position relative to the rotation axis
+   - Optimized angular velocity parameters
+
+3. **Velocity Analysis**
+   - Calculated tangential velocities for all objects
+   - Computed rotational redshifts
+   - Adjusted cosmological redshifts for rotation effects
+   - Estimated corrected distances
+
+4. **Output Generation**
+   - Created comprehensive galaxy CSV dataset
+   - Generated maser-specific XML data
+   - Produced interactive 2D and 3D visualizations
+   - Created rotating visualization model
+
+## General Statistics
+
+- **Total galaxies processed**: {total_galaxies}
+- **Galaxies with maser distances**: {len(maser_data)}
+- **Galaxies with supernova distances**: {len(supernova_data)}
+- **Assumed distance to universe center**: {UNIVERSE_RADIUS:.2e} Mpc
+
+## Rotation Parameters
+
+- **Estimated median angular velocity**: {median_angular_velocity:.2e} rad/s
+- **Optimal angular velocity**: {optimal_omega:.2e} rad/s
+- **Optimal rotation axis**: RA = {np.degrees(optimal_axis_ra):.2f}°, Dec = {np.degrees(optimal_axis_dec):.2f}°
+
+## CMB and Rotation Axis Analysis
+
+| Axis | X | Y | Z |
+|------|---|---|---|
+| Rotation Axis | {rotation_axis[0]:.4f} | {rotation_axis[1]:.4f} | {rotation_axis[2]:.4f} |
+| CMB Dipole Axis | {cmb_dipole_axis[0]:.4f} | {cmb_dipole_axis[1]:.4f} | {cmb_dipole_axis[2]:.4f} |
+| CMB Quadrupole/Octupole Axis | {cmb_quadrupole_axis[0]:.4f} | {cmb_quadrupole_axis[1]:.4f} | {cmb_quadrupole_axis[2]:.4f} |
+
+- **Angle between Rotation Axis and CMB Dipole**: {np.arccos(np.dot(rotation_axis, cmb_dipole_axis)) * 180 / np.pi:.2f} degrees
+- **Angle between Rotation Axis and CMB Quadrupole/Octupole**: {np.arccos(np.dot(rotation_axis, cmb_quadrupole_axis)) * 180 / np.pi:.2f} degrees
+
+## Reliability of Rotation Axis Estimation
+
+Given that we only have data from **five maser galaxies**, the reliability of our rotation axis estimation is limited. With such a small sample size, it's challenging to accurately triangulate the exact location and orientation of the rotation axis. The estimation is an educated guess based on the available data and certain assumptions:
+
+- **Assumptions Made**:
+  - We assume that the rotation axis aligns with the Cosmic Microwave Background (CMB) dipole and quadrupole axes.
+  - We consider Earth's position relative to these axes to estimate its location in the universe.
+  - The maser galaxies are assumed to represent the larger cosmic structure, which may not be the case.
+
+- **Limitations**:
+  - **Sample Size**: Five data points are insufficient for precise triangulation.
+  - **Measurement Errors**: Uncertainties in distance measurements and redshift velocities affect the estimation.
+  - **Simplifications in the Model**: The model assumes simple rotational motion, ignoring complex gravitational interactions.
+
+With **supernova data**, we now have more data points for axis estimation. Supernovae provide independent distance measurements not reliant on redshift.
+
+- **Improvements**:
+  - **Increased Data Points**: Adding supernovae increases the dataset size.
+  - **Independent Distance Measurements**: Supernova distances reduce reliance on redshift.
+
+- **Remaining Limitations**:
+  - **Data Quality**: Supernova measurements may have biases.
+  - **Model Assumptions**: The model assumes simple rotational motion.
+
+## Earth and Maser Data
+
+### Earth
+
+- **Position**: ({earth_position[0]:.2f}, {earth_position[1]:.2f}, {earth_position[2]:.2f}) Mpc
+
+### Maser Data
+"""
+
         for maser in maser_data:
             adjusted_position = maser['adjusted_position']
             axis_distance = calculate_distance_from_axis(adjusted_position, rotation_axis)
-    
             print(f"[maser_data_processing] Assigned adjusted_position for maser {maser['identifier']}.")
-    
             readme_content += f"""
-    #### Maser {maser['identifier']}
-    - **Distance from Earth**: {maser['maser_distance']:.2f} Mpc
-    - **Observed Redshift**: {maser['redshift_velocity'] / SPEED_OF_LIGHT:.6f}
-    - **Distance to rotation axis**: {axis_distance:.2f} Mpc
-    - **Adjusted Coordinates**: ({adjusted_position[0]:.2f}, {adjusted_position[1]:.2f}, {adjusted_position[2]:.2f}) Mpc
-    """
-    
+#### Maser {maser['identifier']}
+- **Distance from Earth**: {maser['maser_distance']:.2f} Mpc
+- **Observed Redshift**: {maser['redshift_velocity'] / SPEED_OF_LIGHT:.6f}
+- **Distance to rotation axis**: {axis_distance:.2f} Mpc
+- **Adjusted Coordinates**: ({adjusted_position[0]:.2f}, {adjusted_position[1]:.2f}, {adjusted_position[2]:.2f}) Mpc
+"""
+
         readme_content += """
-    
-    ### Supernova Data
-    
-    """
-    
+### Supernova Data
+"""
+
         for supernova in supernova_data:
             adjusted_position = supernova['adjusted_position']
             axis_distance = calculate_distance_from_axis(adjusted_position, rotation_axis)
-    
             readme_content += f"""
-    #### Supernova {supernova['identifier']}
-    - **Distance from Earth**: {supernova['distance_mpc']:.2f} Mpc
-    - **Distance to rotation axis**: {axis_distance:.2f} Mpc
-    - **Adjusted Coordinates**: ({adjusted_position[0]:.2f}, {adjusted_position[1]:.2f}, {adjusted_position[2]:.2f}) Mpc
-    """
-    
+#### Supernova {supernova['identifier']}
+- **Distance from Earth**: {supernova['distance_mpc']:.2f} Mpc
+- **Distance to rotation axis**: {axis_distance:.2f} Mpc
+- **Adjusted Coordinates**: ({adjusted_position[0]:.2f}, {adjusted_position[1]:.2f}, {adjusted_position[2]:.2f}) Mpc
+"""
+
         readme_content += """
-    ## Notes
-    
-    - The rotation axis is positioned at the center of the universe (0, 0, 0).
-    - Earth's position is calculated based on the CMB dipole and estimated rotation of the universe.
-    - Maser coordinates are adjusted relative to the central rotation axis.
-    - This model is highly speculative and should be interpreted with caution. It does not reflect the current scientific understanding of the universe's structure and dynamics.
-    - The visualization of this data can be found in the accompanying 3D plot file.
-    """
-    
-        # Write README file
+## Notes
+
+- The rotation axis is at the center of the universe (0, 0, 0).
+- Earth's position is based on the CMB dipole and estimated universe rotation.
+- Maser coordinates are adjusted relative to the rotation axis.
+- This model is speculative and not reflective of current scientific understanding.
+"""
+
         with open('README.md', 'w') as readme_file:
             readme_file.write(readme_content)
-    
+
         log(f"[create_readme] README.md created with {len(readme_content)} bytes")
         return True
     except Exception as e:
